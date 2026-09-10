@@ -5,6 +5,49 @@ import time
 
 import av
 
+
+def _encoded_bytes(encoded) -> bytes:
+    if isinstance(encoded, (bytes, bytearray, memoryview)):
+        return bytes(encoded)
+    if isinstance(encoded, dict):
+        for key in ("bitstream", "data", "packet", "encoded_data", "payload"):
+            if key in encoded:
+                value = encoded[key]
+                if isinstance(value, (bytes, bytearray, memoryview)):
+                    return bytes(value)
+                if isinstance(value, (list, tuple)):
+                    return bytes(value)
+        for value in encoded.values():
+            if isinstance(value, (bytes, bytearray, memoryview)):
+                return bytes(value)
+            if isinstance(value, (dict, list, tuple)):
+                try:
+                    return _encoded_bytes(value)
+                except TypeError:
+                    continue
+    if isinstance(encoded, (list, tuple)):
+        if all(isinstance(value, int) for value in encoded):
+            return bytes(encoded)
+        for value in encoded:
+            try:
+                return _encoded_bytes(value)
+            except TypeError:
+                continue
+    raise TypeError(
+        f"Unsupported PyNvVideoCodec encoded packet type: {type(encoded).__name__}"
+    )
+
+
+def _encoded_timestamp(encoded, name: str):
+    if isinstance(encoded, dict):
+        value = encoded.get(name)
+        if value is None and name == "pts":
+            value = encoded.get("timestamp")
+        if isinstance(value, int):
+            return value
+    return None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,5 +100,46 @@ def send_cpu_packets(
         target.close()
 
 
-def send_cuda_packets():
-    pass
+def send_cuda_packets(packets, output_url: str, transport: str = "tcp") -> None:
+    iterator = iter(packets)
+    try:
+        stream, first_packet, first_source_pts = next(iterator)
+    except StopIteration:
+        return
+    target = av.open(
+        output_url,
+        mode="w",
+        format="rtsp",
+        options={
+            "rtsp_transport": transport,
+            "muxdelay": "0",
+            "muxpreload": "0",
+            "flush_packets": "1",
+        },
+        timeout=(5.0, 5.0),
+    )
+    output_fps = Fraction(str(stream["fps"]))
+    output_stream = target.add_stream("h264", rate=output_fps)
+    output_stream.width, output_stream.height = stream["width"], stream["height"]
+    output_stream.time_base = Fraction(output_fps.denominator, output_fps.numerator)
+    packet_index = 0
+    try:
+        for _, encoded, _ in chain(((stream, first_packet, first_source_pts),), iterator):
+            packet = av.Packet(_encoded_bytes(encoded))
+            packet.stream = output_stream
+            packet.pts = packet_index
+            packet.dts = packet_index
+            packet.duration = 1
+            packet.time_base = output_stream.time_base
+            logger.info(
+                "TRACE TX packet=%d encoder_timestamp=%s picture_type=%s "
+                "mux_pts=%s mux_dts=%s time_base=%s bytes=%d",
+                packet_index,
+                encoded.get("timestamp") if isinstance(encoded, dict) else None,
+                encoded.get("picture_type") if isinstance(encoded, dict) else None,
+                packet.pts, packet.dts, packet.time_base, packet.size,
+            )
+            packet_index += 1
+            target.mux(packet)
+    finally:
+        target.close()

@@ -11,10 +11,10 @@ output:
     transport: tcp
 
 # 파이프라인 백엔드: cpu 또는 cuda
-backend: cpu
+backend: cuda
 inference_interval: 3
 
 # 프레임을 받아서 처리하는 python 파일 경로
 # 공통적으로 on_frame 함수는 이미지 합성까지 처리 후 하나의 완성된 프레임을 반환해야 합니다.
 # backend가 cuda인 경우, on_frame 함수는 GPU 상주 메모리에서 처리되어야 합니다.
-model: examples/inference_cpu.py
+model: examples/inference_cuda.py

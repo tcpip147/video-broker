@@ -1,5 +1,6 @@
 from pathlib import Path
 import logging
+import os
 import time
 from queue import Queue
 from typing import Any
@@ -49,6 +50,23 @@ def load_module(path: str | Path) -> ModuleType:
     spec.loader.exec_module(module)
 
     return module
+
+
+def configure_cuda_dll_path() -> None:
+    """Make CUDA 13.x DLLs discoverable by PyNvVideoCodec on Windows."""
+    if os.name != "nt":
+        return
+    cuda_paths = [
+        os.environ.get("CUDA_PATH"),
+        os.environ.get("CUDA_PATH_V12_6"),
+    ]
+    for cuda_path in filter(None, cuda_paths):
+        for directory in (
+            Path(cuda_path) / "bin",
+            Path(cuda_path) / "bin" / "x64",
+        ):
+            if directory.is_dir() and hasattr(os, "add_dll_directory"):
+                os.add_dll_directory(str(directory))
 
 
 def put_latest(
@@ -148,6 +166,7 @@ def main() -> None:
         process_thread.join()
 
     elif backend == "cuda":
+        configure_cuda_dll_path()
         packets = receive_cuda_packets(input_url, input_transport)
 
         frames = decode_cuda(packets)

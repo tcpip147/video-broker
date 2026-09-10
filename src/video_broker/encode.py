@@ -85,9 +85,10 @@ def encode_cpu(
 
 
 def encode_cuda(
-    frames: Iterable[tuple[av.video.stream.VideoStream, av.VideoFrame, float]],
+    frames: Iterable[tuple[object, object, float]],
     fps: Fraction | None = None,
-) -> Iterator[tuple[av.video.stream.VideoStream, av.Packet, float]]:
+) -> Iterator[tuple[object, object, float]]:
+    import PyNvVideoCodec as nvc
     iterator = iter(frames)
 
     try:
@@ -95,61 +96,46 @@ def encode_cuda(
     except StopIteration:
         return
 
-    if fps is None:
-        fps = get_stream_fps(input_stream)
-    logger.info("output FPS: %s", fps)
-
-    codec = av.CodecContext.create("h264_nvenc", "w")
-    codec.width = first_frame.width
-    codec.height = first_frame.height
-    codec.pix_fmt = "yuv420p"
-    codec.framerate = fps
-    codec.time_base = Fraction(fps.denominator, fps.numerator)
-    codec.options = {
-        "preset": "p1",
-        "tune": "ull",
-        "zerolatency": "1",
-        "bf": "0",
-        "rc-lookahead": "0",
-        "delay": "0",
-        "g": "30",
-        "keyint_min": "30",
-        "sc_threshold": "0",
-        "profile": "baseline",
-        "repeat-headers": "1",
-        "forced-idr": "1",
-    }
-
-    last_pts = None
-    for sequence, (_, frame, received_at) in enumerate(
-        chain(((input_stream, first_frame, first_received_at),), iterator)
+    frame_rate = float(fps or input_stream["fps"])
+    codec = nvc.CreateEncoder(
+        input_stream["width"], input_stream["height"], "NV12", False,
+        gpu_id=0,
+        codec="h264",
+        fps=frame_rate,
+    )
+    frame_index = 0
+    for stream, frame, source_pts in chain(
+        ((input_stream, first_frame, first_received_at),), iterator
     ):
-        source_pts = frame.pts
-        source_time_base = frame.time_base
-        pts = round((received_at - first_received_at) * float(fps))
-        if last_pts is not None and pts <= last_pts:
-            pts = last_pts + 1
-        new_frame = frame.reformat(
-            width=codec.width,
-            height=codec.height,
-            format="yuv420p",
+        encoded_packets = codec.Encode(frame)
+        logger.info(
+            "TRACE ENC_IN frame=%d input_pts=%s encoded=%d",
+            frame_index,
+            source_pts,
+            len(encoded_packets),
         )
-        new_frame.pts = pts
-        new_frame.time_base = codec.time_base
-        last_pts = pts
-
-        for packet in codec.encode(new_frame):
-            source_seconds = (
-                float(source_pts * source_time_base)
-                if source_pts is not None and source_time_base is not None
-                else None
+        for packet_index, encoded_packet in enumerate(encoded_packets):
+            data = encoded_packet.get("data", b"")
+            logger.info(
+                "TRACE ENC_OUT frame=%d subpacket=%d timestamp=%s picture_type=%s bytes=%d",
+                frame_index,
+                packet_index,
+                encoded_packet.get("timestamp"),
+                encoded_packet.get("picture_type"),
+                len(data),
             )
-            packet_seconds = (
-                float(packet.pts * packet.time_base)
-                if packet.pts is not None and packet.time_base is not None
-                else None
-            )
-            yield input_stream, packet, received_at
+            yield stream, encoded_packet, source_pts
+        frame_index += 1
 
-    for packet in codec.encode(None):
-        yield input_stream, packet, first_received_at
+    flushed_packets = codec.EndEncode()
+    logger.info("NVENC flush encoded=%d", len(flushed_packets))
+    for packet_index, encoded_packet in enumerate(flushed_packets):
+        data = encoded_packet.get("data", b"")
+        logger.info(
+            "NVENC flush packet=%d timestamp=%s picture_type=%s bytes=%d",
+            packet_index,
+            encoded_packet.get("timestamp"),
+            encoded_packet.get("picture_type"),
+            len(data),
+        )
+        yield input_stream, encoded_packet, source_pts
