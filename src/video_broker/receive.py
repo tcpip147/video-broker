@@ -94,12 +94,6 @@ def receive_cuda_packets(
         for source_packet in container.demux(video=0):
             if source_packet.dts is None or not source_packet:
                 continue
-            logger.info(
-                "TRACE RX packet=%d pts=%s dts=%s duration=%s key=%s bytes=%d",
-                packet_index, source_packet.pts, source_packet.dts,
-                source_packet.duration, source_packet.is_keyframe,
-                source_packet.size,
-            )
             packet = nvc.PacketData()
             bitstream = ctypes.create_string_buffer(bytes(source_packet))
             packet.bsl_data = ctypes.addressof(bitstream)

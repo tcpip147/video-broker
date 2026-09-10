@@ -52,11 +52,6 @@ def decode_cuda(
 
         decoded_frames = decoder.Decode(packet)
         frame_pts_list = [frame.getPTS() for frame in decoded_frames]
-        logger.info(
-            "TRACE DEC packet=%d input_pts=%s input_dts=%s decoded=%d frame_pts=%s",
-            packet_index, packet.pts, packet.dts,
-            len(decoded_frames), frame_pts_list,
-        )
         packet_index += 1
 
         for frame, frame_pts in zip(decoded_frames, frame_pts_list):
@@ -68,10 +63,6 @@ def decode_cuda(
                     last_frame_pts,
                 )
             last_frame_pts = frame_pts
-            logger.info(
-                "TRACE DEC_OUT frame=%d pts=%s source_packet=%d",
-                frame_index, frame_pts, packet_index - 1,
-            )
             frame_index += 1
             yield input_stream, frame, frame_pts
 

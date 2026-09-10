@@ -131,14 +131,6 @@ def send_cuda_packets(packets, output_url: str, transport: str = "tcp") -> None:
             packet.dts = packet_index
             packet.duration = 1
             packet.time_base = output_stream.time_base
-            logger.info(
-                "TRACE TX packet=%d encoder_timestamp=%s picture_type=%s "
-                "mux_pts=%s mux_dts=%s time_base=%s bytes=%d",
-                packet_index,
-                encoded.get("timestamp") if isinstance(encoded, dict) else None,
-                encoded.get("picture_type") if isinstance(encoded, dict) else None,
-                packet.pts, packet.dts, packet.time_base, packet.size,
-            )
             packet_index += 1
             target.mux(packet)
     finally:

@@ -102,28 +102,15 @@ def encode_cuda(
         gpu_id=0,
         codec="h264",
         fps=frame_rate,
+        bf=0,
     )
     frame_index = 0
     for stream, frame, source_pts in chain(
         ((input_stream, first_frame, first_received_at),), iterator
     ):
         encoded_packets = codec.Encode(frame)
-        logger.info(
-            "TRACE ENC_IN frame=%d input_pts=%s encoded=%d",
-            frame_index,
-            source_pts,
-            len(encoded_packets),
-        )
         for packet_index, encoded_packet in enumerate(encoded_packets):
             data = encoded_packet.get("data", b"")
-            logger.info(
-                "TRACE ENC_OUT frame=%d subpacket=%d timestamp=%s picture_type=%s bytes=%d",
-                frame_index,
-                packet_index,
-                encoded_packet.get("timestamp"),
-                encoded_packet.get("picture_type"),
-                len(data),
-            )
             yield stream, encoded_packet, source_pts
         frame_index += 1
 
