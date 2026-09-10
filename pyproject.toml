@@ -1,0 +1,12 @@
+[project]
+name = "video-broker"
+version = "0.1.0"
+description = "RTSP서버 사이에서 영상을 중계하는 클라이언트"
+requires-python = "==3.13"
+dependencies = [
+    "av==18.1.0",
+    "pyyaml==6.0.3",
+]
+
+[project.scripts]
+video-broker = "video_broker.cli:main"

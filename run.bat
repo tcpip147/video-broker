@@ -1,0 +1,1 @@
+python .\src\video_broker\cli.py
