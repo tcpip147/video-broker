@@ -172,8 +172,11 @@ def main() -> None:
         frames = decode_cuda(packets)
 
         def processed_frames():
+            frame_index = 0
             for input_stream, frame, received_at in frames:
-                processed_frame = model_module.on_frame(frame)
+                should_infer = frame_index % inference_interval == 0
+                processed_frame = model_module.on_frame(frame, infer=should_infer)
+                frame_index += 1
 
                 if processed_frame is not None:
                     yield input_stream, processed_frame, received_at

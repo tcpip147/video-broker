@@ -89,6 +89,7 @@ def encode_cuda(
     fps: Fraction | None = None,
 ) -> Iterator[tuple[object, object, float]]:
     import PyNvVideoCodec as nvc
+    import torch
     iterator = iter(frames)
 
     try:
@@ -105,9 +106,14 @@ def encode_cuda(
         bf=0,
     )
     frame_index = 0
+    synchronization_logged = False
     for stream, frame, source_pts in chain(
         ((input_stream, first_frame, first_received_at),), iterator
     ):
+        torch.cuda.current_stream().synchronize()
+        if not synchronization_logged:
+            logger.info("CUDA stream synchronized before NVENC input")
+            synchronization_logged = True
         encoded_packets = codec.Encode(frame)
         for packet_index, encoded_packet in enumerate(encoded_packets):
             data = encoded_packet.get("data", b"")
