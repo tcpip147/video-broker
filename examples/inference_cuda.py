@@ -69,7 +69,11 @@ def on_frame(frame: Any, *, infer: bool = True) -> Nv12CudaFrame:
     rgb = _nv12_to_rgb(frame)
     if infer:
         result = _get_model().predict(source=rgb.float().div_(255).unsqueeze(0), device="cuda:0", classes=[2], conf=float(os.getenv("YOLO_CONF", "0.35")), verbose=False)[0]
-        _last_boxes = result.boxes.xyxy.detach() if result.boxes is not None else torch.empty((0, 4), device=rgb.device)
+        _last_boxes = (
+            result.boxes.xyxy.detach().clone()
+            if result.boxes is not None
+            else torch.empty((0, 4), device=rgb.device)
+        )
     if _last_boxes is not None:
         _draw_boxes(rgb, _last_boxes)
     return _rgb_to_nv12(rgb)
