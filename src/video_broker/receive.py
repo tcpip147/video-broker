@@ -3,7 +3,6 @@ import logging
 import time
 from collections.abc import Iterator
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -52,5 +51,9 @@ def receive_cpu_packets(
         print(f"{delay}초 후 재접속합니다.")
         time.sleep(delay)
 
-def receive_cuda_packets():
+
+def receive_cuda_packets(
+    url: str,
+    transport: str,
+) -> Iterator[tuple[av.video.stream.VideoStream, av.Packet]]:
     pass

@@ -22,7 +22,6 @@ from types import ModuleType
 from video_broker.receive import (
     receive_cpu_packets,
     receive_cuda_packets,
-    receive_packets,
 )
 from video_broker.decode import decode_cuda, decode_cpu
 from video_broker.encode import encode_cuda, encode_cpu
@@ -122,8 +121,8 @@ def main() -> None:
                             break
 
                     should_infer = frame_index % inference_interval == 0
-                    if model_module is not None and should_infer:
-                        frame = model_module.on_frame(frame)
+                    if model_module is not None:
+                        frame = model_module.on_frame(frame, infer=should_infer)
 
                     frame_index += 1
 

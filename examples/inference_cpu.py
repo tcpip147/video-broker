@@ -9,6 +9,7 @@ from ultralytics import YOLO
 
 
 _model: YOLO | None = None
+_last_boxes = []
 
 
 def _get_model() -> YOLO:
@@ -24,25 +25,32 @@ def _get_model() -> YOLO:
     return _model
 
 
-def on_frame(frame: av.VideoFrame) -> av.VideoFrame:
+def on_frame(frame: av.VideoFrame, *, infer: bool = True) -> av.VideoFrame:
+    global _last_boxes
+
     model = _get_model()
 
     # 입력은 CPU 메모리의 VideoFrame이며, BGR ndarray로 변환한 뒤
     # Ultralytics가 CUDA로 입력을 이동시켜 추론한다.
     image = frame.to_ndarray(format="bgr24")
-    results = model.predict(
-        source=image,
-        device="cuda:0",
-        classes=[2],  # COCO class 2 = car
-        conf=float(os.getenv("YOLO_CONF", "0.35")),
-        verbose=False,
-    )
+    if infer:
+        results = model.predict(
+            source=image,
+            device="cuda:0",
+            classes=[2],  # COCO class 2 = car
+            conf=float(os.getenv("YOLO_CONF", "0.35")),
+            verbose=False,
+        )
 
-    result = results[0]
-    if result.boxes is not None:
-        for box in result.boxes.xyxy.detach().cpu().numpy().astype(int):
-            x1, y1, x2, y2 = box.tolist()
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        result = results[0]
+        if result.boxes is None:
+            _last_boxes = []
+        else:
+            _last_boxes = result.boxes.xyxy.detach().cpu().numpy().astype(int).tolist()
+
+    for box in _last_boxes:
+        x1, y1, x2, y2 = box
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
     output = av.VideoFrame.from_ndarray(image, format="bgr24")
     output.pts = frame.pts
